@@ -436,9 +436,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
     this._render();
   }
 
-  set config(config) {
+  setConfig(config) {
     this._config = JSON.parse(JSON.stringify(config || {}));
-    this._render();
+    if (this.shadowRoot.innerHTML) this._render();
   }
 
   _getMediaPlayers() {
