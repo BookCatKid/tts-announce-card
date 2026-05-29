@@ -429,6 +429,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._config = {};
     this._hass = null;
+    this._render();
   }
 
   set hass(hass) {
@@ -438,7 +439,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   setConfig(config) {
     this._config = JSON.parse(JSON.stringify(config || {}));
-    if (this.shadowRoot.innerHTML) this._render();
+    this._render();
   }
 
   _getMediaPlayers() {
@@ -520,21 +521,32 @@ class TTSAnnounceCardEditor extends HTMLElement {
   _bind() {
     const shadow = this.shadowRoot;
 
-    shadow.getElementById('voice').addEventListener('change', () => {
-      this._config.default_voice = shadow.getElementById('voice').value;
-      this._fireConfigChanged();
-    });
+    const voice = shadow.getElementById('voice');
+    if (voice) {
+      voice.addEventListener('change', () => {
+        this._config.default_voice = voice.value;
+        this._fireConfigChanged();
+      });
+    }
 
-    shadow.getElementById('volume').addEventListener('input', () => {
-      const val = parseInt(shadow.getElementById('volume').value, 10);
-      this._config.default_volume = val;
-      shadow.getElementById('volumeDisplay').textContent = val;
-      this._fireConfigChanged();
-    });
+    const volume = shadow.getElementById('volume');
+    if (volume) {
+      volume.addEventListener('input', () => {
+        const val = parseInt(volume.value, 10);
+        this._config.default_volume = val;
+        const display = shadow.getElementById('volumeDisplay');
+        if (display) display.textContent = val;
+        this._fireConfigChanged();
+      });
+    }
 
     this._bindSpeakerRows();
-    shadow.getElementById('addSpeaker').addEventListener('click', () => this._onAddSpeaker());
-    shadow.getElementById('autoDiscover').addEventListener('click', () => this._onAutoDiscover());
+
+    const addBtn = shadow.getElementById('addSpeaker');
+    if (addBtn) addBtn.addEventListener('click', () => this._onAddSpeaker());
+
+    const autoBtn = shadow.getElementById('autoDiscover');
+    if (autoBtn) autoBtn.addEventListener('click', () => this._onAutoDiscover());
   }
 
   _bindSpeakerRows() {
