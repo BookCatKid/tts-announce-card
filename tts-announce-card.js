@@ -1,26 +1,31 @@
 const VOICES = [
-  { id: 'en-US-AriaNeural', label: 'Aria (US Female, warm)' },
-  { id: 'en-US-JennyNeural', label: 'Jenny (US Female, clear)' },
-  { id: 'en-US-GuyNeural', label: 'Guy (US Male, natural)' },
-  { id: 'en-US-DavisNeural', label: 'Davis (US Male, casual)' },
-  { id: 'en-AU-NatashaNeural', label: 'Natasha (AU Female)' },
-  { id: 'en-AU-WilliamNeural', label: 'William (AU Male)' },
-  { id: 'en-GB-SoniaNeural', label: 'Sonia (GB Female)' },
-  { id: 'en-GB-RyanNeural', label: 'Ryan (GB Male)' },
-  { id: 'en-IE-EmilyNeural', label: 'Emily (IE Female)' },
-  { id: 'en-ZA-LeahNeural', label: 'Leah (ZA Female)' },
+  { id: "en-US-AriaNeural", label: "Aria (US Female, warm)" },
+  { id: "en-US-JennyNeural", label: "Jenny (US Female, clear)" },
+  { id: "en-US-GuyNeural", label: "Guy (US Male, natural)" },
+  { id: "en-US-DavisNeural", label: "Davis (US Male, casual)" },
+  { id: "en-AU-NatashaNeural", label: "Natasha (AU Female)" },
+  { id: "en-AU-WilliamNeural", label: "William (AU Male)" },
+  { id: "en-GB-SoniaNeural", label: "Sonia (GB Female)" },
+  { id: "en-GB-RyanNeural", label: "Ryan (GB Male)" },
+  { id: "en-IE-EmilyNeural", label: "Emily (IE Female)" },
+  { id: "en-ZA-LeahNeural", label: "Leah (ZA Female)" },
 ];
 
 const DEFAULT_SPEAKERS = [
-  { entity: 'media_player.kitchen', name: 'Kitchen' },
-  { entity: 'media_player.move', name: 'Move' },
-  { entity: 'media_player.main_bedroom', name: 'Main Bedroom' },
-  { entity: 'media_player.study', name: 'Study' },
-  { entity: 'media_player.tv_room', name: 'TV Room' },
+  { entity: "media_player.kitchen", name: "Kitchen" },
+  { entity: "media_player.move", name: "Move" },
+  { entity: "media_player.main_bedroom", name: "Main Bedroom" },
+  { entity: "media_player.study", name: "Study" },
+  { entity: "media_player.tv_room", name: "TV Room" },
 ];
+
+// MDI path for close icon (used in ha-icon-button which needs `path` not `icon` in modern HA)
+const MDI_CLOSE =
+  "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
 
 const CARD_STYLE = `
   :host { display: block; }
+
   .trigger-content {
     display: flex;
     align-items: center;
@@ -53,7 +58,7 @@ const CARD_STYLE = `
 
   @keyframes modalIn {
     from { opacity: 0; transform: scale(0.95) translateY(10px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+    to   { opacity: 1; transform: scale(1)    translateY(0);    }
   }
 
   .modal-header {
@@ -63,7 +68,7 @@ const CARD_STYLE = `
     font-family: var(--primary-font-family, 'Roboto', sans-serif);
     color: var(--primary-text-color);
   }
-  .modal-body { padding: 8px 24px 16px; }
+  .modal-body   { padding: 8px 24px 16px; }
   .modal-footer {
     padding: 8px 24px 20px;
     display: flex;
@@ -72,6 +77,8 @@ const CARD_STYLE = `
   }
 
   .field { margin-top: 16px; }
+  .field ha-textfield,
+  .field ha-select { width: 100%; display: block; }
 
   .field-label {
     font-size: 12px;
@@ -87,6 +94,28 @@ const CARD_STYLE = `
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  /* Speaker toggle buttons — use plain <button> so we control styling reliably */
+  .speaker-btn {
+    padding: 6px 14px;
+    border-radius: 18px;
+    border: 1px solid var(--divider-color);
+    background: transparent;
+    color: var(--primary-text-color);
+    font-family: var(--primary-font-family, 'Roboto', sans-serif);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .speaker-btn.selected {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary-color);
+  }
+  .speaker-btn:hover:not(.selected) {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
   }
 
   ha-icon[icon="mdi:microphone"] {
@@ -120,34 +149,47 @@ const CARD_STYLE = `
     margin-top: 16px;
     font-family: var(--primary-font-family, 'Roboto', sans-serif);
   }
+  .status.error { color: var(--error-color, #db4437); }
 `;
 
 class TTSAnnounceCard extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
+    this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = {};
     this._modalOpen = false;
-    this._form = { message: '', volume: 50, voice: 'en-US-AriaNeural', speakers: [] };
+    this._form = {
+      message: "",
+      volume: 50,
+      voice: "en-US-AriaNeural",
+      speakers: [],
+    };
     this._render();
     this._bind();
   }
 
   disconnectedCallback() {
     if (this._keydownHandler) {
-      window.removeEventListener('keydown', this._keydownHandler);
+      window.removeEventListener("keydown", this._keydownHandler);
     }
   }
 
-  set hass(hass) { this._hass = hass; }
+  set hass(hass) {
+    this._hass = hass;
+  }
 
+  setConfig(config) {
+    this._config = config || {};
+    if (this._config.default_volume != null)
+      this._form.volume = this._config.default_volume;
+    if (this._config.default_voice)
+      this._form.voice = this._config.default_voice;
+  }
+
+  // HA also calls `set config` as a property in some versions — support both
   set config(config) {
-    this._config = config;
-    if (config.default_volume != null) this._form.volume = config.default_volume;
-    if (config.default_voice) this._form.voice = config.default_voice;
-    this._renderSpeakers();
-    this._syncForm();
+    this.setConfig(config);
   }
 
   _render() {
@@ -159,17 +201,20 @@ class TTSAnnounceCard extends HTMLElement {
           <span style="font-size:16px;font-weight:500;font-family:var(--primary-font-family,'Roboto',sans-serif);color:var(--primary-text-color)">Announce</span>
         </div>
       </ha-card>
+
       <div class="overlay" id="overlay">
         <ha-card class="modal">
           <div class="modal-header">Send Announcement</div>
           <div class="modal-body">
-            <ha-textfield
-              id="message"
-              label="Message"
-              placeholder="Type your announcement..."
-              multiline
-              maxlength="500"
-            ></ha-textfield>
+
+            <div class="field">
+              <ha-textfield
+                id="message"
+                label="Message"
+                placeholder="Type your announcement..."
+                style="width:100%"
+              ></ha-textfield>
+            </div>
 
             <div class="field">
               <div class="field-label">Volume</div>
@@ -181,8 +226,11 @@ class TTSAnnounceCard extends HTMLElement {
 
             <div class="field">
               <div class="field-label">Voice</div>
-              <ha-select id="voice" label="Voice">
-                ${VOICES.map(v => `<ha-list-item value="${v.id}"${v.id === this._form.voice ? ' selected' : ''}>${v.label}</ha-list-item>`).join('')}
+              <ha-select id="voice" label="Voice" style="width:100%">
+                ${VOICES.map(
+                  (v) =>
+                    `<ha-list-item value="${v.id}">${v.label}</ha-list-item>`,
+                ).join("")}
               </ha-select>
             </div>
 
@@ -205,164 +253,214 @@ class TTSAnnounceCard extends HTMLElement {
   _bind() {
     const s = (id) => this.shadowRoot.getElementById(id);
 
-    s('trigger').addEventListener('click', () => this._open());
-    s('trigger').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._open(); }
+    s("trigger").addEventListener("click", () => this._open());
+    s("trigger").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        this._open();
+      }
     });
-    s('overlay').addEventListener('click', (e) => {
-      if (e.target === s('overlay')) this._close();
+    s("overlay").addEventListener("click", (e) => {
+      if (e.target === s("overlay")) this._close();
     });
-    s('cancelBtn').addEventListener('click', () => this._close());
+    s("cancelBtn").addEventListener("click", () => this._close());
 
-    s('message').addEventListener('input', () => {
-      this._form.message = s('message').value;
+    s("message").addEventListener("input", () => {
+      this._form.message = s("message").value;
       this._updateSendButton();
     });
 
-    s('volume').addEventListener('input', () => {
-      this._form.volume = parseInt(s('volume').value, 10);
-      s('volumeDisplay').textContent = this._form.volume;
+    s("volume").addEventListener("input", () => {
+      this._form.volume = parseInt(s("volume").value, 10);
+      s("volumeDisplay").textContent = this._form.volume;
     });
 
-    s('voice').addEventListener('selected', (ev) => {
-      if (ev.detail?.value != null) this._form.voice = ev.detail.value;
+    // ha-select fires 'selected' but the value lives on ev.detail.value
+    // Wait for element to be defined before trusting its events
+    s("voice").addEventListener("selected", (ev) => {
+      const val = ev.detail?.value ?? ev.target?.value;
+      if (val) this._form.voice = val;
+    });
+    // Also catch change as fallback
+    s("voice").addEventListener("change", (ev) => {
+      const val = ev.target?.value;
+      if (val) this._form.voice = val;
     });
 
-    s('sendBtn').addEventListener('click', () => this._send());
+    s("sendBtn").addEventListener("click", () => this._send());
 
-    window.addEventListener('keydown', this._keydownHandler = (e) => {
-      if (e.key === 'Escape' && this._modalOpen) this._close();
-    });
+    window.addEventListener(
+      "keydown",
+      (this._keydownHandler = (e) => {
+        if (e.key === "Escape" && this._modalOpen) this._close();
+      }),
+    );
   }
 
   _speakerEntities() {
-    return this._config.speakers?.length ? this._config.speakers : DEFAULT_SPEAKERS;
+    return this._config.speakers?.length
+      ? this._config.speakers
+      : DEFAULT_SPEAKERS;
   }
 
   _renderSpeakers() {
-    const container = this.shadowRoot.getElementById('speakers');
+    const container = this.shadowRoot.getElementById("speakers");
     if (!container) return;
     const active = this._form.speakers;
     const speakers = this._speakerEntities();
-    container.innerHTML = speakers.map(s => {
-      const selected = active.includes(s.entity);
-      return `<mwc-button unelevated class="speaker-btn${selected ? ' selected' : ''}" data-entity="${s.entity}" dense>${s.name}</mwc-button>`;
-    }).join('');
 
-    const style = document.createElement('style');
-    style.textContent = `
-      mwc-button.speaker-btn.selected { --mdc-theme-primary: var(--primary-color); }
-      mwc-button.speaker-btn:not(.selected) {
-        --mdc-theme-primary: var(--primary-text-color);
-        --mdc-button-outline-color: var(--divider-color);
-        --mdc-text-button-hover-state-layer-color: transparent;
-        --mdc-text-button-focus-state-layer-color: transparent;
-      }
-    `;
-    container.appendChild(style);
+    container.innerHTML = speakers
+      .map((sp) => {
+        const selected = active.includes(sp.entity);
+        return `<button class="speaker-btn${selected ? " selected" : ""}" data-entity="${sp.entity}">${sp.name}</button>`;
+      })
+      .join("");
 
-    container.querySelectorAll('.speaker-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+    container.querySelectorAll(".speaker-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
         const entity = btn.dataset.entity;
         const idx = this._form.speakers.indexOf(entity);
         if (idx >= 0) {
           this._form.speakers.splice(idx, 1);
+          btn.classList.remove("selected");
         } else {
           this._form.speakers.push(entity);
+          btn.classList.add("selected");
         }
-        this._renderSpeakers();
         this._updateSendButton();
       });
     });
   }
 
   _updateSendButton() {
-    const btn = this.shadowRoot.getElementById('sendBtn');
-    const status = this.shadowRoot.getElementById('status');
+    const btn = this.shadowRoot.getElementById("sendBtn");
+    const status = this.shadowRoot.getElementById("status");
     const hasMessage = this._form.message.trim().length > 0;
     const hasSpeakers = this._form.speakers.length > 0;
+
     btn.disabled = !(hasMessage && hasSpeakers);
+    status.classList.remove("error");
+
     if (!hasMessage && !hasSpeakers) {
-      status.textContent = 'Enter a message and select at least one speaker';
+      status.textContent = "Enter a message and select at least one speaker";
     } else if (!hasMessage) {
-      status.textContent = 'Enter a message';
+      status.textContent = "Enter a message";
     } else if (!hasSpeakers) {
-      status.textContent = 'Select at least one speaker';
+      status.textContent = "Select at least one speaker";
     } else {
       const names = this._speakerEntities()
-        .filter(s => this._form.speakers.includes(s.entity))
-        .map(s => s.name);
-      status.textContent = `Ready: ${names.join(', ')}`;
+        .filter((sp) => this._form.speakers.includes(sp.entity))
+        .map((sp) => sp.name);
+      status.textContent = `Ready: ${names.join(", ")}`;
     }
   }
 
   _syncForm() {
     const s = (id) => this.shadowRoot.getElementById(id);
-    const msg = s('message');
-    const vol = s('volume');
-    const vd = s('volumeDisplay');
-    const vo = s('voice');
+
+    const msg = s("message");
+    const vol = s("volume");
+    const vd = s("volumeDisplay");
+    const vo = s("voice");
+
     if (msg) msg.value = this._form.message;
     if (vol) vol.value = this._form.volume;
     if (vd) vd.textContent = this._form.volume;
-    if (vo) vo.value = this._form.voice;
-    this._updateSendButton();
+
+    // Set ha-select value after it has upgraded
+    if (vo) {
+      const trySetVoice = () => {
+        if (typeof vo.value !== "undefined") {
+          vo.value = this._form.voice;
+        } else {
+          requestAnimationFrame(trySetVoice);
+        }
+      };
+      trySetVoice();
+    }
+
     this._renderSpeakers();
+    this._updateSendButton();
   }
 
   _open() {
     this._modalOpen = true;
+    // Reset state for each open
     this._form.speakers = [];
-    this._form.message = '';
+    this._form.message = "";
     this._form.volume = this._config.default_volume ?? 50;
-    this._form.voice = this._config.default_voice || 'en-US-AriaNeural';
+    this._form.voice = this._config.default_voice || "en-US-AriaNeural";
+
+    this.shadowRoot.getElementById("overlay").classList.add("open");
     this._syncForm();
-    this.shadowRoot.getElementById('overlay').classList.add('open');
+
     setTimeout(() => {
-      const msg = this.shadowRoot.getElementById('message');
+      const msg = this.shadowRoot.getElementById("message");
       if (msg) msg.focus();
     }, 150);
   }
 
   _close() {
     this._modalOpen = false;
-    this.shadowRoot.getElementById('overlay').classList.remove('open');
+    this.shadowRoot.getElementById("overlay").classList.remove("open");
   }
 
   _send() {
     const message = this._form.message.trim();
     const speakers = [...this._form.speakers];
     if (!message || !speakers.length) return;
-    const btn = this.shadowRoot.getElementById('sendBtn');
+
+    const btn = this.shadowRoot.getElementById("sendBtn");
+    const status = this.shadowRoot.getElementById("status");
     btn.disabled = true;
-    btn.label = 'Sending...';
-    this._hass.callService('script', 'tts_run', {
-      message,
-      volume: this._form.volume,
-      voice: this._form.voice,
-      speakers,
-    }).then(() => {
-      this._close();
-    }).catch(() => {
-      btn.disabled = false;
-      btn.label = 'Send';
-      this.shadowRoot.getElementById('status').textContent = 'Failed to send. Check the script name and try again.';
-    });
+    btn.innerText = "Sending…";
+
+    const done = (err) => {
+      if (err) {
+        btn.disabled = false;
+        btn.innerText = "Send";
+        status.classList.add("error");
+        status.textContent = `Error: ${err.message || "Failed to send. Check script name."}`;
+      } else {
+        this._close();
+      }
+    };
+
+    try {
+      const result = this._hass.callService("script", "tts_run", {
+        message,
+        volume: this._form.volume,
+        voice: this._form.voice,
+        speakers,
+      });
+      // callService may or may not return a Promise depending on HA version
+      if (result && typeof result.then === "function") {
+        result.then(() => done(null)).catch(done);
+      } else {
+        done(null);
+      }
+    } catch (err) {
+      done(err);
+    }
   }
 
   static async getConfigElement() {
-    await customElements.whenDefined('tts-announce-card-editor');
-    return document.createElement('tts-announce-card-editor');
+    await customElements.whenDefined("tts-announce-card-editor");
+    return document.createElement("tts-announce-card-editor");
   }
 
   static getStubConfig() {
     return {
-      default_voice: 'en-US-AriaNeural',
+      default_voice: "en-US-AriaNeural",
       default_volume: 50,
       speakers: DEFAULT_SPEAKERS,
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Editor
+// ---------------------------------------------------------------------------
 
 const EDITOR_STYLE = `
   :host { display: block; }
@@ -381,8 +479,8 @@ const EDITOR_STYLE = `
     display: block;
     margin-bottom: 4px;
   }
-  .section > ha-select { width: 100%; }
-  .section > ha-textfield { width: 100%; }
+  .section > ha-select,
+  .section > ha-textfield { width: 100%; display: block; }
 
   .volume-row {
     display: flex;
@@ -403,9 +501,28 @@ const EDITOR_STYLE = `
     align-items: flex-start;
     margin-bottom: 8px;
   }
-  .speaker-row ha-select { flex: 1; min-width: 0; }
+  .speaker-row ha-select    { flex: 1; min-width: 0; }
   .speaker-row ha-textfield { width: 140px; flex-shrink: 0; }
-  .speaker-row ha-icon-button { flex-shrink: 0; --ha-icon-button-size: 36px; }
+
+  /* Plain remove button — ha-icon-button path API varies too much */
+  .remove-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--secondary-text-color);
+    font-size: 20px;
+    line-height: 36px;
+    text-align: center;
+    border-radius: 50%;
+    transition: background 0.15s, color 0.15s;
+  }
+  .remove-btn:hover {
+    background: var(--secondary-background-color);
+    color: var(--primary-text-color);
+  }
 
   .speaker-actions {
     display: flex;
@@ -425,7 +542,7 @@ const EDITOR_STYLE = `
 class TTSAnnounceCardEditor extends HTMLElement {
   constructor() {
     super();
-    this.attachShadow({ mode: 'open' });
+    this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
     this._render();
@@ -444,8 +561,8 @@ class TTSAnnounceCardEditor extends HTMLElement {
   _getMediaPlayers() {
     if (!this._hass) return [];
     return Object.keys(this._hass.states)
-      .filter(id => id.startsWith('media_player.'))
-      .map(id => ({
+      .filter((id) => id.startsWith("media_player."))
+      .map((id) => ({
         entity_id: id,
         name: this._hass.states[id].attributes.friendly_name || id,
       }))
@@ -453,7 +570,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
   }
 
   _render() {
-    const voice = this._config.default_voice || 'en-US-AriaNeural';
+    const voice = this._config.default_voice || "en-US-AriaNeural";
     const volume = this._config.default_volume ?? 50;
     const speakers = this._config.speakers || [];
     const entities = this._getMediaPlayers();
@@ -461,12 +578,13 @@ class TTSAnnounceCardEditor extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${EDITOR_STYLE}</style>
       <div class="editor">
+
         <div class="section">
           <label class="section-title">Default Voice</label>
-          <ha-select id="voice" label="Voice">
-            ${VOICES.map(v =>
-              `<ha-list-item value="${v.id}"${v.id === voice ? ' selected' : ''}>${v.label}</ha-list-item>`
-            ).join('')}
+          <ha-select id="voice" label="Voice" style="width:100%">
+            ${VOICES.map(
+              (v) => `<ha-list-item value="${v.id}">${v.label}</ha-list-item>`,
+            ).join("")}
           </ha-select>
         </div>
 
@@ -481,109 +599,146 @@ class TTSAnnounceCardEditor extends HTMLElement {
         <div class="section">
           <label class="section-title">Speakers</label>
           <div id="speakersContainer">
-            ${speakers.length === 0
-              ? '<div class="empty-state">No speakers configured. Add one below or auto-discover your media players.</div>'
-              : speakers.map((s, i) => this._speakerRowHTML(s, i, entities)).join('')
+            ${
+              speakers.length === 0
+                ? '<div class="empty-state">No speakers configured. Add one below or auto-discover your media players.</div>'
+                : speakers
+                    .map((sp, i) => this._speakerRowHTML(sp, i, entities))
+                    .join("")
             }
           </div>
           <div class="speaker-actions">
             <mwc-button unelevated id="addSpeaker">Add Speaker</mwc-button>
-            <mwc-button outlined id="autoDiscover">${entities.length > 0 ? `Auto-discover (${entities.length})` : 'Auto-discover'}</mwc-button>
+            <mwc-button outlined id="autoDiscover">${entities.length > 0 ? `Auto-discover (${entities.length})` : "Auto-discover"}</mwc-button>
           </div>
         </div>
+
       </div>
     `;
 
-    this._bind();
+    // Set ha-select value after render (can't set via attribute reliably)
+    requestAnimationFrame(() => {
+      const voiceEl = this.shadowRoot.getElementById("voice");
+      if (voiceEl) voiceEl.value = voice;
+    });
+
+    this._bindEditor();
   }
 
   _speakerRowHTML(speaker, index, entities) {
-    const selected = speaker.entity || '';
-    const name = speaker.name || '';
-    const options = entities.map(e =>
-      `<ha-list-item value="${e.entity_id}"${e.entity_id === selected ? ' selected' : ''}>${e.name}</ha-list-item>`
-    ).join('');
-    const currentInList = entities.some(e => e.entity_id === selected);
+    const selected = speaker.entity || "";
+    const name = (speaker.name || "").replace(/"/g, "&quot;");
+    const options = entities
+      .map(
+        (e) => `<ha-list-item value="${e.entity_id}">${e.name}</ha-list-item>`,
+      )
+      .join("");
+    const currentInList = entities.some((e) => e.entity_id === selected);
     return `
       <div class="speaker-row" data-index="${index}">
-        <ha-select class="entity-select" label="Entity">
+        <ha-select class="entity-select" label="Entity" style="flex:1;min-width:0">
           <ha-list-item value="">— Select entity —</ha-list-item>
           ${options}
-          ${!currentInList && selected ? `<ha-list-item value="${selected}" selected>${selected}</ha-list-item>` : ''}
+          ${!currentInList && selected ? `<ha-list-item value="${selected}">${selected}</ha-list-item>` : ""}
         </ha-select>
-        <ha-textfield class="name-input" label="Name" value="${name.replace(/"/g, '&quot;')}"></ha-textfield>
-        <ha-icon-button class="remove-btn" icon="mdi:close" title="Remove speaker"></ha-icon-button>
+        <ha-textfield class="name-input" label="Name" value="${name}" style="width:140px;flex-shrink:0"></ha-textfield>
+        <button class="remove-btn" title="Remove speaker" aria-label="Remove speaker">✕</button>
       </div>
     `;
   }
 
-  _bind() {
+  _bindEditor() {
     const shadow = this.shadowRoot;
 
-    const voice = shadow.getElementById('voice');
+    const voice = shadow.getElementById("voice");
     if (voice) {
-      voice.addEventListener('selected', (ev) => {
-        if (ev.detail?.value != null) {
-          this._config.default_voice = ev.detail.value;
+      voice.addEventListener("selected", (ev) => {
+        const val = ev.detail?.value ?? ev.target?.value;
+        if (val) {
+          this._config.default_voice = val;
+          this._fireConfigChanged();
+        }
+      });
+      voice.addEventListener("change", (ev) => {
+        const val = ev.target?.value;
+        if (val) {
+          this._config.default_voice = val;
           this._fireConfigChanged();
         }
       });
     }
 
-    const volume = shadow.getElementById('volume');
+    const volume = shadow.getElementById("volume");
     if (volume) {
-      volume.addEventListener('input', () => {
+      volume.addEventListener("input", () => {
         const val = parseInt(volume.value, 10);
         this._config.default_volume = val;
-        const display = shadow.getElementById('volumeDisplay');
+        const display = shadow.getElementById("volumeDisplay");
         if (display) display.textContent = val;
         this._fireConfigChanged();
       });
     }
 
+    // Set entity-select values after render (same ha-select issue)
+    const speakers = this._config.speakers || [];
+    requestAnimationFrame(() => {
+      shadow.querySelectorAll(".entity-select").forEach((el, i) => {
+        if (speakers[i]?.entity) el.value = speakers[i].entity;
+      });
+    });
+
     this._bindSpeakerRows();
 
-    const addBtn = shadow.getElementById('addSpeaker');
-    if (addBtn) addBtn.addEventListener('click', () => this._onAddSpeaker());
-
-    const autoBtn = shadow.getElementById('autoDiscover');
-    if (autoBtn) autoBtn.addEventListener('click', () => this._onAutoDiscover());
+    const addBtn = shadow.getElementById("addSpeaker");
+    const autoBtn = shadow.getElementById("autoDiscover");
+    if (addBtn) addBtn.addEventListener("click", () => this._onAddSpeaker());
+    if (autoBtn)
+      autoBtn.addEventListener("click", () => this._onAutoDiscover());
   }
 
   _bindSpeakerRows() {
-    const shadow = this.shadowRoot;
-    shadow.querySelectorAll('.entity-select').forEach(el => {
-      el.addEventListener('selected', (ev) => this._onEntityChange(el, ev.detail?.value));
+    this.shadowRoot.querySelectorAll(".entity-select").forEach((el) => {
+      el.addEventListener("selected", (ev) =>
+        this._onEntityChange(el, ev.detail?.value),
+      );
+      el.addEventListener("change", (ev) =>
+        this._onEntityChange(el, ev.target?.value),
+      );
     });
-    shadow.querySelectorAll('.name-input').forEach(el => {
-      el.addEventListener('input', () => this._onNameChange(el));
+    this.shadowRoot.querySelectorAll(".name-input").forEach((el) => {
+      el.addEventListener("input", () => this._onNameChange(el));
     });
-    shadow.querySelectorAll('.remove-btn').forEach(el => {
-      el.addEventListener('click', () => this._onRemoveSpeaker(el));
+    this.shadowRoot.querySelectorAll(".remove-btn").forEach((el) => {
+      el.addEventListener("click", () => this._onRemoveSpeaker(el));
     });
   }
 
-  _onEntityChange(selectEl, selectedValue) {
-    const row = selectEl.closest('.speaker-row');
-    if (!row) return;
-    const index = parseInt(row.dataset.index, 10);
-    const entity = selectedValue ?? selectEl.value;
+  _rowIndex(el) {
+    return parseInt(el.closest(".speaker-row")?.dataset.index ?? "-1", 10);
+  }
+
+  _onEntityChange(selectEl, value) {
+    const index = this._rowIndex(selectEl);
+    const entity = value ?? selectEl.value;
+    if (index < 0) return;
     const speakers = this._config.speakers || [];
     if (!speakers[index]) return;
     speakers[index].entity = entity;
-    if (entity && this._hass && this._hass.states[entity]) {
+    if (entity && this._hass?.states[entity]) {
       const fn = this._hass.states[entity].attributes.friendly_name;
       if (fn) speakers[index].name = fn;
+      // Update name field without full re-render
+      const row = this.shadowRoot.querySelectorAll(".speaker-row")[index];
+      const nameInput = row?.querySelector(".name-input");
+      if (nameInput && fn) nameInput.value = fn;
     }
     this._config.speakers = speakers;
-    this._reRenderSpeakerRows();
     this._fireConfigChanged();
   }
 
   _onNameChange(inputEl) {
-    const row = inputEl.closest('.speaker-row');
-    if (!row) return;
-    const index = parseInt(row.dataset.index, 10);
+    const index = this._rowIndex(inputEl);
+    if (index < 0) return;
     const speakers = this._config.speakers || [];
     if (!speakers[index]) return;
     speakers[index].name = inputEl.value;
@@ -592,9 +747,8 @@ class TTSAnnounceCardEditor extends HTMLElement {
   }
 
   _onRemoveSpeaker(btnEl) {
-    const row = btnEl.closest('.speaker-row');
-    if (!row) return;
-    const index = parseInt(row.dataset.index, 10);
+    const index = this._rowIndex(btnEl);
+    if (index < 0) return;
     const speakers = this._config.speakers || [];
     speakers.splice(index, 1);
     this._config.speakers = speakers.length ? speakers : undefined;
@@ -604,7 +758,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   _onAddSpeaker() {
     const speakers = this._config.speakers || [];
-    speakers.push({ entity: '', name: '' });
+    speakers.push({ entity: "", name: "" });
     this._config.speakers = speakers;
     this._reRenderSpeakerRows();
     this._fireConfigChanged();
@@ -612,7 +766,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   _onAutoDiscover() {
     const entities = this._getMediaPlayers();
-    this._config.speakers = entities.map(e => ({
+    this._config.speakers = entities.map((e) => ({
       entity: e.entity_id,
       name: e.name,
     }));
@@ -621,44 +775,57 @@ class TTSAnnounceCardEditor extends HTMLElement {
   }
 
   _reRenderSpeakerRows() {
-    const container = this.shadowRoot.getElementById('speakersContainer');
+    const container = this.shadowRoot.getElementById("speakersContainer");
     if (!container) return;
     const speakers = this._config.speakers || [];
     const entities = this._getMediaPlayers();
-    container.innerHTML = speakers.length === 0
-      ? '<div class="empty-state">No speakers configured. Add one below or auto-discover your media players.</div>'
-      : speakers.map((s, i) => this._speakerRowHTML(s, i, entities)).join('');
+    container.innerHTML =
+      speakers.length === 0
+        ? '<div class="empty-state">No speakers configured. Add one below or auto-discover your media players.</div>'
+        : speakers
+            .map((sp, i) => this._speakerRowHTML(sp, i, entities))
+            .join("");
+
+    // Re-set ha-select values
+    requestAnimationFrame(() => {
+      this.shadowRoot.querySelectorAll(".entity-select").forEach((el, i) => {
+        if (speakers[i]?.entity) el.value = speakers[i].entity;
+      });
+    });
+
     this._bindSpeakerRows();
   }
 
   _fireConfigChanged() {
+    // Always emit all fields — don't silently swallow defaults
     const config = {
-      type: this._config.type || 'custom:tts-announce-card',
+      type: this._config.type || "custom:tts-announce-card",
+      default_voice: this._config.default_voice || "en-US-AriaNeural",
+      default_volume: this._config.default_volume ?? 50,
     };
-    if (this._config.default_voice && this._config.default_voice !== 'en-US-AriaNeural') {
-      config.default_voice = this._config.default_voice;
-    }
-    if (this._config.default_volume != null && this._config.default_volume !== 50) {
-      config.default_volume = this._config.default_volume;
-    }
     if (this._config.speakers?.length) {
-      config.speakers = this._config.speakers.map(s => ({ entity: s.entity, name: s.name }));
+      config.speakers = this._config.speakers
+        .filter((s) => s.entity)
+        .map((s) => ({ entity: s.entity, name: s.name || s.entity }));
     }
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config },
-      bubbles: true,
-      composed: true,
-    }));
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 }
 
-customElements.define('tts-announce-card-editor', TTSAnnounceCardEditor);
-customElements.define('tts-announce-card', TTSAnnounceCard);
+customElements.define("tts-announce-card-editor", TTSAnnounceCardEditor);
+customElements.define("tts-announce-card", TTSAnnounceCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: 'tts-announce-card',
-  name: 'TTS Announce Card',
-  description: 'Send voice announcements to media players with volume, voice, and speaker selection.',
+  type: "tts-announce-card",
+  name: "TTS Announce Card",
+  description:
+    "Send voice announcements to media players with volume, voice, and speaker selection.",
   preview: false,
 });
