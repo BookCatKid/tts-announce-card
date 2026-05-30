@@ -85,11 +85,11 @@ const CARD_STYLE = `
   }
 
   .form {
-    padding: 8px 0;
+    padding: 4px 0;
   }
 
   .field {
-    margin-top: 20px;
+    margin-top: 16px;
   }
 
   .field-label {
@@ -124,7 +124,7 @@ const CARD_STYLE = `
   .status {
     font-size: 12px;
     color: var(--secondary-text-color);
-    margin-top: 16px;
+    margin-top: 12px;
     min-height: 18px;
   }
 
@@ -181,6 +181,7 @@ class TTSAnnounceCard extends HTMLElement {
             label="Message"
             placeholder="Type your announcement…"
             maxlength="500"
+            autofocus
           ></ha-textarea>
 
           <ha-select id="voice" label="Voice" class="field"></ha-select>
@@ -207,12 +208,10 @@ class TTSAnnounceCard extends HTMLElement {
     `;
 
     const voiceSelect = this.shadowRoot.getElementById("voice");
-    VOICES.forEach((v) => {
-      const item = document.createElement("mwc-list-item");
-      item.value = v.id;
-      item.textContent = `${v.label} — ${v.desc}`;
-      voiceSelect.appendChild(item);
-    });
+    voiceSelect.options = VOICES.map((v) => ({
+      value: v.id,
+      label: `${v.label} — ${v.desc}`,
+    }));
   }
 
   _bind() {
@@ -238,8 +237,8 @@ class TTSAnnounceCard extends HTMLElement {
       s("volumeDisplay").textContent = `${this._form.volume}%`;
     });
 
-    s("voice").addEventListener("change", (e) => {
-      this._form.voice = e.target.value;
+    s("voice").addEventListener("selected", (e) => {
+      this._form.voice = e.detail.value;
     });
   }
 
@@ -256,12 +255,10 @@ class TTSAnnounceCard extends HTMLElement {
     const selected = this._form.speakers;
 
     speakers.forEach((sp) => {
-      const ff = document.createElement("ha-formfield");
-      const meta = getPlatformMeta(this._hass, sp.entity);
-      ff.label = meta ? `${sp.name} (${meta.label})` : sp.name;
-
-      const cb = document.createElement("mwc-checkbox");
+      const cb = document.createElement("ha-checkbox");
       cb.value = sp.entity;
+      const meta = getPlatformMeta(this._hass, sp.entity);
+      cb.textContent = meta ? `${sp.name} (${meta.label})` : sp.name;
       if (selected.includes(sp.entity)) {
         cb.checked = true;
       }
@@ -277,8 +274,7 @@ class TTSAnnounceCard extends HTMLElement {
         this._updateSendButton();
       });
 
-      ff.appendChild(cb);
-      container.appendChild(ff);
+      container.appendChild(cb);
     });
   }
 
@@ -319,11 +315,6 @@ class TTSAnnounceCard extends HTMLElement {
     this._updateSpeakers();
     this._updateSendButton();
     this.shadowRoot.getElementById("dialog").open = true;
-
-    setTimeout(() => {
-      const msg = this.shadowRoot.getElementById("message");
-      if (msg) msg.focus();
-    }, 100);
   }
 
   _send() {
@@ -503,7 +494,7 @@ const EDITOR_STYLE = `
 
   .speaker-row .entity-select { flex: 1; min-width: 0; }
   .speaker-row .type-select { width: 110px; flex-shrink: 0; }
-  .speaker-row ha-textfield { width: 130px; flex-shrink: 0; }
+  .speaker-row ha-input { width: 130px; flex-shrink: 0; }
 
   .speaker-actions {
     display: flex;
@@ -585,12 +576,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
         <div class="section">
           <label class="section-title">Default Voice</label>
-          <ha-select id="voice" label="Voice">
-            ${VOICES.map(
-              (v) =>
-                `<mwc-list-item value="${v.id}"${v.id === voice ? " selected" : ""}>${v.label} — ${v.desc}</mwc-list-item>`,
-            ).join("")}
-          </ha-select>
+          <ha-select id="voice" label="Voice"></ha-select>
         </div>
 
         <div class="section">
@@ -602,10 +588,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
         <div class="section">
           <label class="section-title">Alexa Notify Type</label>
-          <ha-select id="alexaType" label="Alexa Notify Type">
-            <mwc-list-item value="announce"${alexaType === "announce" ? " selected" : ""}>Announce</mwc-list-item>
-            <mwc-list-item value="tts"${alexaType === "tts" ? " selected" : ""}>TTS</mwc-list-item>
-          </ha-select>
+          <ha-select id="alexaType" label="Alexa Notify Type"></ha-select>
         </div>
 
         <div class="section">
@@ -620,27 +603,22 @@ class TTSAnnounceCardEditor extends HTMLElement {
       </div>
     `;
 
+    const voiceSelect = this.shadowRoot.getElementById("voice");
+    voiceSelect.options = VOICES.map((v) => ({
+      value: v.id,
+      label: `${v.label} — ${v.desc}`,
+    }));
+    voiceSelect.value = voice;
+
+    const alexaSelect = this.shadowRoot.getElementById("alexaType");
+    alexaSelect.options = [
+      { value: "announce", label: "Announce" },
+      { value: "tts", label: "TTS" },
+    ];
+    alexaSelect.value = alexaType;
+
     this._renderSpeakerRows();
     this._bindEditor();
-  }
-
-  _createEntitySelectHTML(speaker, entities) {
-    const selectedId = speaker.entity || "";
-    const items = entities.map(
-      (e) =>
-        `<mwc-list-item value="${e.entity_id}"${e.entity_id === selectedId ? " selected" : ""}>${e.name}${e.meta ? ` (${e.meta.label})` : e.platform ? ` (${e.platform})` : ""}</mwc-list-item>`,
-    );
-    const needsMissing =
-      selectedId && !entities.some((e) => e.entity_id === selectedId);
-    if (needsMissing) {
-      items.unshift(
-        `<mwc-list-item value="${selectedId}" selected>${selectedId}</mwc-list-item>`,
-      );
-    }
-    return `<ha-select class="entity-select" label="Entity">
-      <mwc-list-item value="">— Select entity —</mwc-list-item>
-      ${items.join("")}
-    </ha-select>`;
   }
 
   _renderSpeakerRows() {
@@ -662,16 +640,38 @@ class TTSAnnounceCardEditor extends HTMLElement {
         const type = sp.type || this._guessSpeakerType(sp.entity, entities);
         return `
           <div class="speaker-row" data-index="${i}">
-            ${this._createEntitySelectHTML(sp, entities)}
-            <ha-select class="type-select" label="Type">
-              <mwc-list-item value="chime"${type === "chime" ? " selected" : ""}>Chime</mwc-list-item>
-              <mwc-list-item value="alexa"${type === "alexa" ? " selected" : ""}>Alexa</mwc-list-item>
-            </ha-select>
-            <ha-textfield class="name-input" label="Label" value="${name}"></ha-textfield>
+            <ha-select class="entity-select" label="Entity"></ha-select>
+            <ha-select class="type-select" label="Type"></ha-select>
+            <ha-input class="name-input" label="Label" value="${name}"></ha-input>
             <ha-icon-button class="remove-btn" icon="mdi:close"></ha-icon-button>
           </div>`;
       })
       .join("");
+
+    container.querySelectorAll(".entity-select").forEach((select, i) => {
+      select.options = entities.map((e) => ({
+        value: e.entity_id,
+        label: `${e.name}${e.meta ? ` (${e.meta.label})` : e.platform ? ` (${e.platform})` : ""}`,
+      }));
+      const needsMissing =
+        speakers[i]?.entity &&
+        !entities.some((e) => e.entity_id === speakers[i].entity);
+      if (needsMissing) {
+        select.options = [
+          { value: speakers[i].entity, label: speakers[i].entity },
+          ...select.options,
+        ];
+      }
+      if (speakers[i]?.entity) select.value = speakers[i].entity;
+    });
+
+    container.querySelectorAll(".type-select").forEach((select, i) => {
+      select.options = [
+        { value: "chime", label: "Chime" },
+        { value: "alexa", label: "Alexa" },
+      ];
+      if (speakers[i]?.type) select.value = speakers[i].type;
+    });
 
     this._bindSpeakerRows();
   }
@@ -679,8 +679,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
   _bindEditor() {
     const shadow = this.shadowRoot;
 
-    shadow.getElementById("voice")?.addEventListener("change", (e) => {
-      this._config.default_voice = e.target.value;
+    shadow.getElementById("voice")?.addEventListener("selected", (e) => {
+      shadow.getElementById("voice").value = e.detail.value;
+      this._config.default_voice = e.detail.value;
       this._fireConfigChanged();
     });
 
@@ -692,8 +693,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
       this._fireConfigChanged();
     });
 
-    shadow.getElementById("alexaType")?.addEventListener("change", (e) => {
-      this._config.alexa_type = e.target.value;
+    shadow.getElementById("alexaType")?.addEventListener("selected", (e) => {
+      shadow.getElementById("alexaType").value = e.detail.value;
+      this._config.alexa_type = e.detail.value;
       this._fireConfigChanged();
     });
 
@@ -719,10 +721,16 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   _bindSpeakerRows() {
     this.shadowRoot.querySelectorAll(".entity-select").forEach((el) => {
-      el.addEventListener("change", () => this._onEntityChange(el));
+      el.addEventListener("selected", (e) => {
+        el.value = e.detail.value;
+        this._onEntityChange(el);
+      });
     });
     this.shadowRoot.querySelectorAll(".type-select").forEach((el) => {
-      el.addEventListener("change", () => this._onTypeChange(el));
+      el.addEventListener("selected", (e) => {
+        el.value = e.detail.value;
+        this._onTypeChange(el);
+      });
     });
     this.shadowRoot.querySelectorAll(".name-input").forEach((el) => {
       el.addEventListener("input", () => this._onNameChange(el));
@@ -766,7 +774,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
       );
       const row = this.shadowRoot.querySelectorAll(".speaker-row")[index];
       const typeSelect = row?.querySelector(".type-select");
-      if (typeSelect) typeSelect.value = speakers[index].type;
+      if (typeSelect) {
+        typeSelect.value = speakers[index].type;
+      }
     }
     this._config.speakers = speakers;
     this._fireConfigChanged();
