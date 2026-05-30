@@ -686,12 +686,18 @@ class TTSAnnounceCardEditor extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
+    this._entitiesKey = "";
     this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    const entities = this._getMediaPlayers();
+    const key = this._mediaPlayersKey(entities);
+    if (key !== this._entitiesKey) {
+      this._entitiesKey = key;
+      this._render();
+    }
   }
 
   setConfig(config) {
@@ -719,6 +725,12 @@ class TTSAnnounceCardEditor extends HTMLElement {
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  _mediaPlayersKey(entities) {
+    return JSON.stringify(
+      entities.map((e) => [e.entity_id, e.name, e.platform || ""]),
+    );
   }
 
   _entitySelectHTML(selectedId, entities, cssClass) {
@@ -751,6 +763,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
     const volume = this._config.default_volume ?? 50;
     const speakers = this._config.speakers || [];
     const entities = this._getMediaPlayers();
+    this._entitiesKey = this._mediaPlayersKey(entities);
 
     const voiceOptions = VOICES.map(
       (v) =>
