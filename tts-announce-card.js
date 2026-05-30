@@ -26,6 +26,9 @@ const MDI_CLOSE =
 const CARD_STYLE = `
   :host { display: block; }
 
+  #trigger {
+    overflow: hidden;
+  }
   .trigger-content {
     display: flex;
     align-items: center;
@@ -33,6 +36,7 @@ const CARD_STYLE = `
     padding: 16px;
     cursor: pointer;
     user-select: none;
+    border-radius: var(--ha-card-border-radius, 12px);
   }
   .trigger-content:hover { background: var(--secondary-background-color); }
 
@@ -83,8 +87,6 @@ const CARD_STYLE = `
   .field-label {
     font-size: 12px;
     font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
     color: var(--secondary-text-color);
     margin-bottom: 4px;
     font-family: var(--primary-font-family, 'Roboto', sans-serif);
@@ -226,12 +228,7 @@ class TTSAnnounceCard extends HTMLElement {
 
             <div class="field">
               <div class="field-label">Voice</div>
-              <ha-select id="voice" label="Voice" style="width:100%">
-                ${VOICES.map(
-                  (v) =>
-                    `<ha-list-item value="${v.id}">${v.label}</ha-list-item>`,
-                ).join("")}
-              </ha-select>
+              <ha-select id="voice" label="Voice" style="width:100%"></ha-select>
             </div>
 
             <div class="field">
@@ -242,8 +239,8 @@ class TTSAnnounceCard extends HTMLElement {
             <div class="status" id="status">Select at least one speaker and enter a message</div>
           </div>
           <div class="modal-footer">
-            <mwc-button id="cancelBtn">Cancel</mwc-button>
-            <mwc-button id="sendBtn" raised disabled>Send</mwc-button>
+            <ha-button id="cancelBtn" appearance="plain">Cancel</ha-button>
+            <ha-button id="sendBtn" appearance="filled" disabled>Send</ha-button>
           </div>
         </ha-card>
       </div>
@@ -275,17 +272,26 @@ class TTSAnnounceCard extends HTMLElement {
       s("volumeDisplay").textContent = this._form.volume;
     });
 
-    // ha-select fires 'selected' but the value lives on ev.detail.value
-    // Wait for element to be defined before trusting its events
-    s("voice").addEventListener("selected", (ev) => {
-      const val = ev.detail?.value ?? ev.target?.value;
-      if (val) this._form.voice = val;
-    });
-    // Also catch change as fallback
-    s("voice").addEventListener("change", (ev) => {
-      const val = ev.target?.value;
-      if (val) this._form.voice = val;
-    });
+    const voice = s("voice");
+    if (voice) {
+      voice.options = VOICES.map((v) => ({ value: v.id, label: v.label }));
+      // ha-select fires 'selected' but does not set value itself
+      voice.addEventListener("selected", (ev) => {
+        const val = ev.detail?.value ?? ev.target?.value;
+        if (val !== undefined) {
+          voice.value = val;
+          this._form.voice = val;
+        }
+      });
+      // Also catch change as fallback
+      voice.addEventListener("change", (ev) => {
+        const val = ev.target?.value;
+        if (val !== undefined) {
+          voice.value = val;
+          this._form.voice = val;
+        }
+      });
+    }
 
     s("sendBtn").addEventListener("click", () => this._send());
 
@@ -371,6 +377,7 @@ class TTSAnnounceCard extends HTMLElement {
     if (vo) {
       const trySetVoice = () => {
         if (typeof vo.value !== "undefined") {
+          vo.options = VOICES.map((v) => ({ value: v.id, label: v.label }));
           vo.value = this._form.voice;
         } else {
           requestAnimationFrame(trySetVoice);
@@ -473,8 +480,6 @@ const EDITOR_STYLE = `
   .section-title {
     font-size: 12px;
     font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
     color: var(--secondary-text-color);
     display: block;
     margin-bottom: 4px;
@@ -581,11 +586,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
         <div class="section">
           <label class="section-title">Default Voice</label>
-          <ha-select id="voice" label="Voice" style="width:100%">
-            ${VOICES.map(
-              (v) => `<ha-list-item value="${v.id}">${v.label}</ha-list-item>`,
-            ).join("")}
-          </ha-select>
+          <ha-select id="voice" label="Voice" style="width:100%"></ha-select>
         </div>
 
         <div class="section">
@@ -608,8 +609,10 @@ class TTSAnnounceCardEditor extends HTMLElement {
             }
           </div>
           <div class="speaker-actions">
-            <mwc-button unelevated id="addSpeaker">Add Speaker</mwc-button>
-            <mwc-button outlined id="autoDiscover">${entities.length > 0 ? `Auto-discover (${entities.length})` : "Auto-discover"}</mwc-button>
+            <ha-button id="addSpeaker" appearance="filled">Add Speaker</ha-button>
+            <ha-button id="autoDiscover" appearance="plain">
+              ${entities.length > 0 ? `Auto-discover (${entities.length})` : "Auto-discover"}
+            </ha-button>
           </div>
         </div>
 
@@ -619,7 +622,11 @@ class TTSAnnounceCardEditor extends HTMLElement {
     // Set ha-select value after render (can't set via attribute reliably)
     requestAnimationFrame(() => {
       const voiceEl = this.shadowRoot.getElementById("voice");
-      if (voiceEl) voiceEl.value = voice;
+      if (voiceEl) {
+        voiceEl.options = VOICES.map((v) => ({ value: v.id, label: v.label }));
+        voiceEl.value = voice;
+      }
+      this._applyEntitySelects(entities, speakers);
     });
 
     this._bindEditor();
@@ -628,19 +635,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
   _speakerRowHTML(speaker, index, entities) {
     const selected = speaker.entity || "";
     const name = (speaker.name || "").replace(/"/g, "&quot;");
-    const options = entities
-      .map(
-        (e) => `<ha-list-item value="${e.entity_id}">${e.name}</ha-list-item>`,
-      )
-      .join("");
-    const currentInList = entities.some((e) => e.entity_id === selected);
     return `
       <div class="speaker-row" data-index="${index}">
-        <ha-select class="entity-select" label="Entity" style="flex:1;min-width:0">
-          <ha-list-item value="">— Select entity —</ha-list-item>
-          ${options}
-          ${!currentInList && selected ? `<ha-list-item value="${selected}">${selected}</ha-list-item>` : ""}
-        </ha-select>
+        <ha-select class="entity-select" label="Entity" style="flex:1;min-width:0"></ha-select>
         <ha-textfield class="name-input" label="Name" value="${name}" style="width:140px;flex-shrink:0"></ha-textfield>
         <button class="remove-btn" title="Remove speaker" aria-label="Remove speaker">✕</button>
       </div>
@@ -654,14 +651,16 @@ class TTSAnnounceCardEditor extends HTMLElement {
     if (voice) {
       voice.addEventListener("selected", (ev) => {
         const val = ev.detail?.value ?? ev.target?.value;
-        if (val) {
+        if (val !== undefined) {
+          voice.value = val;
           this._config.default_voice = val;
           this._fireConfigChanged();
         }
       });
       voice.addEventListener("change", (ev) => {
         const val = ev.target?.value;
-        if (val) {
+        if (val !== undefined) {
+          voice.value = val;
           this._config.default_voice = val;
           this._fireConfigChanged();
         }
@@ -682,9 +681,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
     // Set entity-select values after render (same ha-select issue)
     const speakers = this._config.speakers || [];
     requestAnimationFrame(() => {
-      shadow.querySelectorAll(".entity-select").forEach((el, i) => {
-        if (speakers[i]?.entity) el.value = speakers[i].entity;
-      });
+      this._applyEntitySelects(this._getMediaPlayers(), speakers);
     });
 
     this._bindSpeakerRows();
@@ -719,11 +716,12 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   _onEntityChange(selectEl, value) {
     const index = this._rowIndex(selectEl);
-    const entity = value ?? selectEl.value;
+    const entity = value ?? selectEl.value ?? "";
     if (index < 0) return;
     const speakers = this._config.speakers || [];
     if (!speakers[index]) return;
     speakers[index].entity = entity;
+    if (selectEl.value !== entity) selectEl.value = entity;
     if (entity && this._hass?.states[entity]) {
       const fn = this._hass.states[entity].attributes.friendly_name;
       if (fn) speakers[index].name = fn;
@@ -786,14 +784,29 @@ class TTSAnnounceCardEditor extends HTMLElement {
             .map((sp, i) => this._speakerRowHTML(sp, i, entities))
             .join("");
 
-    // Re-set ha-select values
+    // Re-set ha-select values/options
     requestAnimationFrame(() => {
-      this.shadowRoot.querySelectorAll(".entity-select").forEach((el, i) => {
-        if (speakers[i]?.entity) el.value = speakers[i].entity;
-      });
+      this._applyEntitySelects(entities, speakers);
     });
 
     this._bindSpeakerRows();
+  }
+
+  _applyEntitySelects(entities, speakers) {
+    const baseOptions = entities.map((e) => ({
+      value: e.entity_id,
+      label: e.name,
+    }));
+    this.shadowRoot.querySelectorAll(".entity-select").forEach((el, i) => {
+      const selected = speakers[i]?.entity || "";
+      const needsMissing =
+        selected && !entities.some((e) => e.entity_id === selected);
+      el.options = needsMissing
+        ? [...baseOptions, { value: selected, label: selected }]
+        : baseOptions;
+      el.clearable = true;
+      if (selected) el.value = selected;
+    });
   }
 
   _fireConfigChanged() {
