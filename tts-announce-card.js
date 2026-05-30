@@ -56,10 +56,14 @@ function getPlatformMeta(hass, entityId) {
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
 const CARD_STYLE = `
-  :host { display: block; }
+  :host {
+    display: block;
+    min-height: var(--card-height, auto);
+  }
 
   .trigger {
     cursor: pointer;
+    min-height: var(--card-height, auto);
   }
 
   .trigger-inner {
@@ -68,6 +72,8 @@ const CARD_STYLE = `
     gap: 16px;
     padding: 16px;
     transition: background-color 0.15s;
+    min-height: var(--card-height, auto);
+    box-sizing: border-box;
   }
 
   .trigger-inner:hover {
@@ -228,6 +234,9 @@ class TTSAnnounceCard extends HTMLElement {
 
   setConfig(config) {
     this._config = config || {};
+    if (this._config.height) {
+      this.style.setProperty("--card-height", this._config.height);
+    }
   }
 
   set config(c) {
@@ -666,6 +675,10 @@ class TTSAnnounceCard extends HTMLElement {
       speakers: DEFAULT_SPEAKERS,
     };
   }
+
+  getCardSize() {
+    return this._config.height ? 3 : 1;
+  }
 }
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
@@ -796,6 +809,11 @@ class TTSAnnounceCardEditor extends HTMLElement {
         </div>
 
         <div class="section">
+          <label class="section-title">Card Height</label>
+          <ha-input id="cardHeight" label="Height (e.g. 200px or auto)"></ha-input>
+        </div>
+
+        <div class="section">
           <label class="section-title">Speakers</label>
           <div id="speakersContainer"></div>
           <div class="speaker-actions">
@@ -820,6 +838,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
       { value: "tts", label: "TTS" },
     ];
     alexaSelect.value = alexaType;
+
+    const heightInput = this.shadowRoot.getElementById("cardHeight");
+    if (heightInput) heightInput.value = this._config.height || "";
 
     this._renderSpeakerRows();
     this._bindEditor();
@@ -899,6 +920,12 @@ class TTSAnnounceCardEditor extends HTMLElement {
     shadow.getElementById("alexaType")?.addEventListener("selected", (e) => {
       shadow.getElementById("alexaType").value = e.detail.value;
       this._config.alexa_type = e.detail.value;
+      this._fireConfigChanged();
+    });
+
+    shadow.getElementById("cardHeight")?.addEventListener("input", () => {
+      const val = shadow.getElementById("cardHeight").value;
+      this._config.height = val || undefined;
       this._fireConfigChanged();
     });
 
@@ -1021,6 +1048,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
       default_voice: this._config.default_voice || "en-US-AriaNeural",
       default_volume: this._config.default_volume ?? 50,
     };
+    if (this._config.height) {
+      config.height = this._config.height;
+    }
     if (this._config.alexa_type?.trim()) {
       config.alexa_type = this._config.alexa_type.trim();
     }
