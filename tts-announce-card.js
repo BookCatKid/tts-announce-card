@@ -161,7 +161,30 @@ const CARD_STYLE = `
   #speakers {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+  }
+
+  .speaker-group {
+    margin-bottom: 4px;
+    padding-left: 4px;
+    border-left: 2px solid var(--divider-color, #e0e0e0);
+  }
+
+  .speaker-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+  }
+
+  .group-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--primary-text-color);
   }
 
   .status {
@@ -292,6 +315,7 @@ class TTSAnnounceCard extends HTMLElement {
     });
 
     s("voice").addEventListener("selected", (e) => {
+      s("voice").value = e.detail.value;
       this._form.voice = e.detail.value;
     });
 
@@ -304,38 +328,124 @@ class TTSAnnounceCard extends HTMLElement {
       : DEFAULT_SPEAKERS;
   }
 
+  _getGroupedSpeakers() {
+    const speakers = this._speakerEntities();
+    const groups = {};
+    speakers.forEach((sp) => {
+      const meta = getPlatformMeta(this._hass, sp.entity);
+      const label = meta ? meta.label : "Unknown";
+      if (!groups[label]) {
+        groups[label] = {
+          label,
+          icon: meta?.icon || "mdi:speaker",
+          speakers: [],
+        };
+      }
+      groups[label].speakers.push(sp);
+    });
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, g]) => g);
+  }
+
   _updateSpeakers() {
     const container = this.shadowRoot.getElementById("speakers");
     container.innerHTML = "";
-    const speakers = this._speakerEntities();
     const selected = this._form.speakers;
+    const groups = this._getGroupedSpeakers();
 
-    speakers.forEach((sp) => {
-      const cb = document.createElement("ha-checkbox");
-      cb.value = sp.entity;
-      const meta = getPlatformMeta(this._hass, sp.entity);
-      cb.textContent = meta ? `${sp.name} (${meta.label})` : sp.name;
-      if (selected.includes(sp.entity)) {
-        cb.checked = true;
-      }
+    groups.forEach((group) => {
+      const groupDiv = document.createElement("div");
+      groupDiv.className = "speaker-group";
 
-      cb.addEventListener("change", () => {
-        if (cb.checked) {
-          this._form.speakers.push(sp.entity);
-        } else {
-          this._form.speakers = this._form.speakers.filter(
-            (e) => e !== sp.entity,
-          );
+      const header = document.createElement("div");
+      header.className = "group-header";
+      header.dataset.group = group.label;
+
+      const label = document.createElement("span");
+      label.className = "group-label";
+      label.textContent = group.label;
+      header.appendChild(label);
+
+      const groupBtn = document.createElement("button");
+      groupBtn.className = "group-select-btn field-label-btn";
+      groupBtn.textContent = "Select All";
+      groupBtn.addEventListener("click", () =>
+        this._toggleGroup(group.label),
+      );
+      header.appendChild(groupBtn);
+
+      groupDiv.appendChild(header);
+
+      group.speakers.forEach((sp) => {
+        const cb = document.createElement("ha-checkbox");
+        cb.value = sp.entity;
+        cb.textContent = sp.name;
+        if (selected.includes(sp.entity)) {
+          cb.checked = true;
         }
-        this._updateSendButton();
-        this._updateSelectAllButton();
+        cb.addEventListener("change", () => {
+          if (cb.checked) {
+            this._form.speakers.push(sp.entity);
+          } else {
+            this._form.speakers = this._form.speakers.filter(
+              (e) => e !== sp.entity,
+            );
+          }
+          this._updateSendButton();
+          this._updateGlobalSelectAllButton();
+          this._updateGroupSelectButtons();
+        });
+        groupDiv.appendChild(cb);
       });
 
-      container.appendChild(cb);
+      container.appendChild(groupDiv);
+    });
+
+    this._updateGroupSelectButtons();
+  }
+
+  _updateGroupSelectButtons() {
+    const groups = this._getGroupedSpeakers();
+    groups.forEach((group) => {
+      const entities = group.speakers.map((sp) => sp.entity);
+      const allSelected = entities.every((e) =>
+        this._form.speakers.includes(e),
+      );
+      const header = this.shadowRoot.querySelector(
+        `[data-group="${group.label}"]`,
+      );
+      if (!header) return;
+      const btn = header.querySelector(".group-select-btn");
+      if (btn) btn.textContent = allSelected ? "Deselect All" : "Select All";
     });
   }
 
-  _updateSelectAllButton() {
+  _toggleGroup(label) {
+    const groups = this._getGroupedSpeakers();
+    const group = groups.find((g) => g.label === label);
+    if (!group) return;
+    const entities = group.speakers.map((sp) => sp.entity);
+    const allSelected = entities.every((e) =>
+      this._form.speakers.includes(e),
+    );
+    if (allSelected) {
+      this._form.speakers = this._form.speakers.filter(
+        (e) => !entities.includes(e),
+      );
+    } else {
+      entities.forEach((e) => {
+        if (!this._form.speakers.includes(e)) {
+          this._form.speakers.push(e);
+        }
+      });
+    }
+    this._updateSpeakers();
+    this._updateGlobalSelectAllButton();
+    this._updateSendButton();
+  }
+
+  _updateGlobalSelectAllButton() {
     const btn = this.shadowRoot.getElementById("selectAllBtn");
     if (!btn) return;
     const allEntities = this._speakerEntities().map((sp) => sp.entity);
@@ -362,7 +472,7 @@ class TTSAnnounceCard extends HTMLElement {
     }
 
     this._updateSpeakers();
-    this._updateSelectAllButton();
+    this._updateGlobalSelectAllButton();
     this._updateSendButton();
   }
 
@@ -402,7 +512,7 @@ class TTSAnnounceCard extends HTMLElement {
     this.shadowRoot.getElementById("volumeDisplay").textContent = `${this._form.volume}%`;
 
     this._updateSpeakers();
-    this._updateSelectAllButton();
+    this._updateGlobalSelectAllButton();
     this._updateSendButton();
     this.shadowRoot.getElementById("dialog").open = true;
 
