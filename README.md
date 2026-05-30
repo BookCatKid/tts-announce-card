@@ -13,8 +13,8 @@ type: custom:tts-announce-card
 1. The card renders an **Announce** button on your dashboard
 2. Tap it — a popup opens with message, volume, voice, and speaker selection
 3. Fill in the details and hit **Send**
-4. The card calls `script.tts_run` via Home Assistant's WebSocket API
-5. The script handles the rest via **Chime TTS** + **Edge TTS**
+4. The card calls **Chime TTS** directly via Home Assistant's WebSocket API
+5. Chime TTS uses **Edge TTS** for voices
 
 ## Dependencies
 
@@ -22,44 +22,8 @@ type: custom:tts-announce-card
 |---|---|---|
 | [Chime TTS](https://github.com/AlexxIT/ChimeTTS) | Interrupts music, plays TTS, restores volume | HACS |
 | [Edge TTS](https://github.com/hasscc/hass-edge-tts) | Voice engine | HACS |
-| `script.tts_run` | Receives variables and calls `chime_tts.say` | One-time setup (see below) |
 
 No button-card, no Browser Mod, no helpers required.
-
-## Script Setup (One Time)
-
-Create a script called `script.tts_run` with the following YAML:
-
-```yaml
-alias: TTS Run
-mode: single
-fields:
-  message:
-    selector:
-      text:
-  volume:
-    selector:
-      number:
-        min: 0
-        max: 100
-  voice:
-    selector:
-      text:
-  speakers:
-    selector:
-      object:
-sequence:
-  - condition: template
-    value_template: "{{ speakers | count > 0 and message != '' }}"
-  - action: chime_tts.say
-    data:
-      entity_id: "{{ speakers | join(',') }}"
-      message: "{{ message }}"
-      tts_platform: tts.edge_tts
-      language: "{{ voice }}"
-      volume_level: "{{ volume | float / 100 }}"
-      announce: true
-```
 
 ## Installation
 

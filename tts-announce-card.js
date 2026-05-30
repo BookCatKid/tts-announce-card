@@ -544,19 +544,18 @@ class TTSAnnounceCard extends HTMLElement {
         btn.disabled = false;
         btn.textContent = "Send";
         status.classList.add("error");
-        status.textContent = `Error: ${err.message || "Failed to send. Check script name."}`;
+        status.textContent = `Error: ${err.message || "Failed to send. Check Chime TTS service."}`;
       } else {
         this._close();
       }
     };
 
     try {
-      const result = this._hass.callService("script", "tts_run", {
-        message,
-        volume: this._form.volume,
-        voice: this._form.voice,
-        speakers,
-      });
+      const result = this._hass.callService(
+        "chime_tts",
+        "say",
+        this._serviceData(message, speakers),
+      );
       if (result && typeof result.then === "function") {
         result.then(() => done(null)).catch(done);
       } else {
@@ -565,6 +564,24 @@ class TTSAnnounceCard extends HTMLElement {
     } catch (err) {
       done(err);
     }
+  }
+
+  _serviceData(message, speakers) {
+    const ttsPlatform = "tts.edge_tts";
+    const volume = Number.isFinite(this._form.volume)
+      ? this._form.volume
+      : parseInt(this._form.volume, 10);
+    const data = {
+      entity_id: speakers.join(","),
+      message,
+      announce: true,
+    };
+    data.tts_platform = ttsPlatform;
+    if (this._form.voice) data.language = this._form.voice;
+    if (Number.isFinite(volume)) {
+      data.volume_level = Math.max(0, Math.min(100, volume)) / 100;
+    }
+    return data;
   }
 
   static async getConfigElement() {
@@ -599,6 +616,9 @@ const EDITOR_STYLE = `
     color: var(--secondary-text-color);
     display: block;
     margin-bottom: 6px;
+  }
+  .full-width {
+    width: 100%;
   }
 
   ${NATIVE_SELECT_CSS}
