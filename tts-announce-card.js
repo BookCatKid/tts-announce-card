@@ -567,7 +567,7 @@ class TTSAnnounceCard extends HTMLElement {
   }
 
   _serviceData(message, speakers) {
-    const ttsPlatform = "edge_tts";
+    const ttsPlatform = "tts.edge_tts_service_edge_tts";
     const volume = Number.isFinite(this._form.volume)
       ? this._form.volume
       : parseInt(this._form.volume, 10);
