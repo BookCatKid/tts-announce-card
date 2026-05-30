@@ -93,9 +93,52 @@ const CARD_STYLE = `
   }
 
   .field-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     font-size: 12px;
     color: var(--secondary-text-color);
     margin-bottom: 4px;
+  }
+
+  .field-label-btn {
+    font-size: 12px;
+    color: var(--primary-color);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .field-label-btn:active {
+    opacity: 0.7;
+  }
+
+  .msg-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 80px;
+    resize: vertical;
+    padding: 12px 16px;
+    border: 1px solid var(--divider-color, #e0e0e0);
+    border-radius: 4px;
+    background: var(--card-background-color, #fff);
+    color: var(--primary-text-color);
+    font-family: var(--primary-font-family, 'Roboto', sans-serif);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.5;
+  }
+  .msg-textarea:focus {
+    border-color: var(--primary-color);
+  }
+  .msg-textarea::placeholder {
+    color: var(--secondary-text-color);
+    opacity: 0.7;
   }
 
   .volume-control {
@@ -130,6 +173,10 @@ const CARD_STYLE = `
 
   .status.error {
     color: var(--error-color);
+  }
+
+  .status.success {
+    color: var(--success-color, #43a047);
   }
 `;
 
@@ -174,15 +221,15 @@ class TTSAnnounceCard extends HTMLElement {
         </div>
       </ha-card>
 
-      <ha-dialog id="dialog" header-title="Send Announcement">
+      <ha-dialog id="dialog" header-title="Send Announcement" prevent-scrim-close>
         <div class="form">
-          <ha-textarea
+          <textarea
             id="message"
-            label="Message"
+            class="msg-textarea"
             placeholder="Type your announcement…"
             maxlength="500"
             autofocus
-          ></ha-textarea>
+          ></textarea>
 
           <ha-select id="voice" label="Voice" class="field"></ha-select>
 
@@ -195,14 +242,17 @@ class TTSAnnounceCard extends HTMLElement {
           </div>
 
           <div class="field">
-            <div class="field-label">Speakers</div>
+            <div class="field-label">
+              <span>Speakers</span>
+              <button class="field-label-btn" id="selectAllBtn">Select All</button>
+            </div>
             <div id="speakers"></div>
           </div>
 
           <div class="status" id="status">Select at least one speaker and enter a message</div>
         </div>
 
-        <ha-button slot="footer" appearance="outlined" data-dialog="close" id="cancelBtn">Cancel</ha-button>
+        <ha-button slot="footer" id="cancelBtn" appearance="outlined">Cancel</ha-button>
         <ha-button slot="footer" id="sendBtn" disabled>Send</ha-button>
       </ha-dialog>
     `;
@@ -225,6 +275,10 @@ class TTSAnnounceCard extends HTMLElement {
       }
     });
 
+    s("cancelBtn").addEventListener("click", () => {
+      s("dialog").open = false;
+    });
+
     s("sendBtn").addEventListener("click", () => this._send());
 
     s("message").addEventListener("input", () => {
@@ -240,6 +294,8 @@ class TTSAnnounceCard extends HTMLElement {
     s("voice").addEventListener("selected", (e) => {
       this._form.voice = e.detail.value;
     });
+
+    s("selectAllBtn").addEventListener("click", () => this._toggleSelectAll());
   }
 
   _speakerEntities() {
@@ -272,10 +328,42 @@ class TTSAnnounceCard extends HTMLElement {
           );
         }
         this._updateSendButton();
+        this._updateSelectAllButton();
       });
 
       container.appendChild(cb);
     });
+  }
+
+  _updateSelectAllButton() {
+    const btn = this.shadowRoot.getElementById("selectAllBtn");
+    if (!btn) return;
+    const allEntities = this._speakerEntities().map((sp) => sp.entity);
+    if (!allEntities.length) {
+      btn.textContent = "Select All";
+      return;
+    }
+    const allSelected = allEntities.every((e) =>
+      this._form.speakers.includes(e),
+    );
+    btn.textContent = allSelected ? "Deselect All" : "Select All";
+  }
+
+  _toggleSelectAll() {
+    const allEntities = this._speakerEntities().map((sp) => sp.entity);
+    const allSelected = allEntities.every((e) =>
+      this._form.speakers.includes(e),
+    );
+
+    if (allSelected) {
+      this._form.speakers = [];
+    } else {
+      this._form.speakers = [...allEntities];
+    }
+
+    this._updateSpeakers();
+    this._updateSelectAllButton();
+    this._updateSendButton();
   }
 
   _updateSendButton() {
@@ -285,7 +373,7 @@ class TTSAnnounceCard extends HTMLElement {
     const hasSpeakers = this._form.speakers.length > 0;
 
     btn.disabled = !(hasMessage && hasSpeakers);
-    status.classList.remove("error");
+    status.classList.remove("error", "success");
 
     if (!hasMessage && !hasSpeakers) {
       status.textContent = "Enter a message and select at least one speaker";
@@ -307,14 +395,18 @@ class TTSAnnounceCard extends HTMLElement {
     this._form.volume = this._config.default_volume ?? 50;
     this._form.voice = this._config.default_voice || "en-US-AriaNeural";
 
-    this.shadowRoot.getElementById("message").value = "";
+    const msg = this.shadowRoot.getElementById("message");
+    msg.value = "";
     this.shadowRoot.getElementById("voice").value = this._form.voice;
     this.shadowRoot.getElementById("volume").value = this._form.volume;
     this.shadowRoot.getElementById("volumeDisplay").textContent = `${this._form.volume}%`;
 
     this._updateSpeakers();
+    this._updateSelectAllButton();
     this._updateSendButton();
     this.shadowRoot.getElementById("dialog").open = true;
+
+    setTimeout(() => msg.focus(), 100);
   }
 
   _send() {
@@ -325,17 +417,18 @@ class TTSAnnounceCard extends HTMLElement {
     const btn = this.shadowRoot.getElementById("sendBtn");
     const status = this.shadowRoot.getElementById("status");
     btn.disabled = true;
-    btn.textContent = "Sending…";
-    status.classList.remove("error");
+    status.classList.remove("error", "success");
+    status.textContent = "Sending…";
 
     const done = (err) => {
       if (err) {
         btn.disabled = false;
-        btn.textContent = "Send";
         status.classList.add("error");
         status.textContent = `Error: ${err.message || "Failed to send. Check Chime TTS or Alexa service."}`;
       } else {
-        this.shadowRoot.getElementById("dialog").open = false;
+        btn.disabled = false;
+        status.classList.add("success");
+        status.textContent = "Announcement sent!";
       }
     };
 
@@ -637,7 +730,6 @@ class TTSAnnounceCardEditor extends HTMLElement {
     container.innerHTML = speakers
       .map((sp, i) => {
         const name = (sp.name || "").replace(/"/g, "&quot;");
-        const type = sp.type || this._guessSpeakerType(sp.entity, entities);
         return `
           <div class="speaker-row" data-index="${i}">
             <ha-select class="entity-select" label="Entity"></ha-select>
