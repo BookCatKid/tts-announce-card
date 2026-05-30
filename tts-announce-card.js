@@ -192,6 +192,7 @@ const CARD_STYLE = `
     color: var(--secondary-text-color);
     margin-top: 12px;
     min-height: 18px;
+    white-space: pre-wrap;
   }
 
   .status.error {
@@ -495,7 +496,7 @@ class TTSAnnounceCard extends HTMLElement {
       const names = this._speakerEntities()
         .filter((sp) => this._form.speakers.includes(sp.entity))
         .map((sp) => sp.name);
-      status.textContent = `Ready · ${names.join(", ")}`;
+      status.textContent = `Ready ·\n${names.join("\n")}`;
     }
   }
 
