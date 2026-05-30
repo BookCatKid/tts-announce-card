@@ -14,7 +14,8 @@ type: custom:tts-announce-card
 2. Tap it — a popup opens with message, volume, voice, and speaker selection
 3. Fill in the details and hit **Send**
 4. The card calls **Chime TTS** directly via Home Assistant's WebSocket API
-5. Chime TTS uses **Edge TTS** for voices
+5. If a speaker is marked as **Alexa**, the card uses **notify.alexa_media** instead
+6. Chime TTS uses **Edge TTS** for voices
 
 ## Dependencies
 
@@ -22,6 +23,7 @@ type: custom:tts-announce-card
 |---|---|---|
 | [Chime TTS](https://github.com/AlexxIT/ChimeTTS) | Interrupts music, plays TTS, restores volume | HACS |
 | [Edge TTS](https://github.com/hasscc/hass-edge-tts) | Voice engine | HACS |
+| [Alexa Media Player](https://github.com/custom-components/alexa_media_player) | Alexa TTS/announce (optional) | HACS |
 
 No button-card, no Browser Mod, no helpers required.
 
@@ -55,7 +57,8 @@ Add the card to your dashboard and click **Edit** → the UI editor lets you con
 
 - **Default Voice** — choose from 10 Edge TTS voices
 - **Default Volume** — set 0–100 with a slider
-- **Speakers** — add/remove speakers with entity selectors populated live from your Home Assistant media players. Click **Auto-discover** to instantly populate every `media_player.*` entity. Rename any speaker. Remove any row.
+- **Alexa Notify Type** — choose `announce` or `tts` for Alexa Media Player devices
+- **Speakers** — add/remove speakers with entity selectors populated live from your Home Assistant media players. Click **Auto-discover** to instantly populate every `media_player.*` entity. Rename any speaker. Mark any speaker as **Alexa**.
 
 All configuration is optional — the card works with zero config. For YAML-only dashboards, you can still configure via YAML:
 
@@ -63,24 +66,32 @@ All configuration is optional — the card works with zero config. For YAML-only
 type: custom:tts-announce-card
 default_voice: en-AU-NatashaNeural
 default_volume: 40
+alexa_type: announce
 speakers:
   - entity: media_player.kitchen
     name: Kitchen
+    type: chime
   - entity: media_player.move
     name: Move
+    type: chime
   - entity: media_player.main_bedroom
     name: Bedroom
+    type: chime
   - entity: media_player.study
     name: Study
+    type: chime
   - entity: media_player.tv_room
     name: TV Room
+    type: alexa
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `default_voice` | string | `en-US-AriaNeural` | Default voice in the dropdown |
 | `default_volume` | number | `50` | Default volume (0–100) |
+| `alexa_type` | string | `announce` | Alexa notify type (`announce` or `tts`) |
 | `speakers` | list | Built-in defaults | Override speaker name mapping |
+| `speakers[].type` | string | auto | `chime` or `alexa` (auto-detects Alexa Media Player when omitted) |
 
 ## Supported Voices
 

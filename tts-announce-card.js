@@ -544,26 +544,92 @@ class TTSAnnounceCard extends HTMLElement {
         btn.disabled = false;
         btn.textContent = "Send";
         status.classList.add("error");
-        status.textContent = `Error: ${err.message || "Failed to send. Check Chime TTS service."}`;
+        status.textContent = `Error: ${err.message || "Failed to send. Check Chime TTS or Alexa service."}`;
       } else {
         this._close();
       }
     };
 
     try {
-      const result = this._hass.callService(
-        "chime_tts",
-        "say",
-        this._serviceData(message, speakers),
-      );
-      if (result && typeof result.then === "function") {
-        result.then(() => done(null)).catch(done);
-      } else {
-        done(null);
+      const { chimeTargets, alexaTargets } = this._splitTargets(speakers);
+      const calls = [];
+      if (chimeTargets.length) {
+        calls.push(
+          this._hass.callService(
+            "chime_tts",
+            "say",
+            this._serviceData(message, chimeTargets),
+          ),
+        );
       }
+      if (alexaTargets.length) {
+        calls.push(
+          this._hass.callService(
+            "notify",
+            "alexa_media",
+            this._alexaServiceData(message, alexaTargets),
+          ),
+        );
+      }
+      if (!calls.length) {
+        done(new Error("No valid targets selected."));
+        return;
+      }
+      Promise.all(
+        calls.map((result) =>
+          result && typeof result.then === "function"
+            ? result
+            : Promise.resolve(),
+        ),
+      )
+        .then(() => done(null))
+        .catch(done);
     } catch (err) {
       done(err);
     }
+  }
+
+  _splitTargets(speakers) {
+    const chimeTargets = [];
+    const alexaTargets = [];
+    speakers.forEach((entity) => {
+      if (this._isAlexaSpeaker(entity)) {
+        alexaTargets.push(entity);
+      } else {
+        chimeTargets.push(entity);
+      }
+    });
+    return { chimeTargets, alexaTargets };
+  }
+
+  _isAlexaSpeaker(entityId) {
+    const entry = this._speakerEntities().find((sp) => sp.entity === entityId);
+    if (entry?.type) return entry.type === "alexa";
+    const platform = this._speakerPlatform(entityId);
+    if (!platform) return false;
+    const value = platform.toLowerCase();
+    return value === "alexa_media" || value.includes("alexa");
+  }
+
+  _speakerPlatform(entityId) {
+    if (!this._hass) return null;
+    const state = this._hass.states?.[entityId];
+    if (!state) return null;
+    return (
+      state.attributes.platform ||
+      state.attributes.integration ||
+      this._hass.entities?.[entityId]?.platform ||
+      null
+    );
+  }
+
+  _alexaServiceData(message, targets) {
+    const type = (this._config.alexa_type || "announce").trim() || "announce";
+    return {
+      message,
+      target: targets,
+      data: { type },
+    };
   }
 
   _serviceData(message, speakers) {
@@ -655,6 +721,7 @@ const EDITOR_STYLE = `
   }
   /* entity select takes up remaining space */
   .speaker-row .native-select-wrap { flex: 1; min-width: 0; }
+  .speaker-row .type-select-wrap { flex: 0 0 110px; }
   .speaker-row ha-textfield { width: 130px; flex-shrink: 0; }
 
   .remove-btn {
@@ -795,11 +862,19 @@ class TTSAnnounceCardEditor extends HTMLElement {
     const speakers = this._config.speakers || [];
     const entities = this._getMediaPlayers();
     this._entitiesKey = this._mediaPlayersKey(entities);
+    const alexaType =
+      (this._config.alexa_type || "announce").trim().toLowerCase() || "announce";
 
     const voiceOptions = VOICES.map(
       (v) =>
         `<option value="${v.id}"${v.id === voice ? " selected" : ""}>${v.label} — ${v.desc}</option>`,
     ).join("");
+    const alexaOptions = ["announce", "tts"]
+      .map(
+        (v) =>
+          `<option value="${v}"${v === alexaType ? " selected" : ""}>${v}</option>`,
+      )
+      .join("");
 
     this.shadowRoot.innerHTML = `
       <style>${EDITOR_STYLE}</style>
@@ -816,6 +891,13 @@ class TTSAnnounceCardEditor extends HTMLElement {
           <label class="section-title">Default Volume — <span id="volumeDisplay">${volume}</span>%</label>
           <div class="volume-row">
             <ha-slider id="volume" min="0" max="100" value="${volume}" step="1" pin></ha-slider>
+          </div>
+        </div>
+
+        <div class="section">
+          <label class="section-title">Alexa Notify Type</label>
+          <div class="native-select-wrap">
+            <select id="alexaType">${alexaOptions}</select>
           </div>
         </div>
 
@@ -846,9 +928,19 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   _speakerRowHTML(speaker, index, entities) {
     const name = (speaker.name || "").replace(/"/g, "&quot;");
+    const type = speaker.type || this._guessSpeakerType(speaker.entity, entities);
+    const typeOptions = ["chime", "alexa"]
+      .map(
+        (v) =>
+          `<option value="${v}"${v === type ? " selected" : ""}>${v === "alexa" ? "Alexa" : "Chime"}</option>`,
+      )
+      .join("");
     return `
       <div class="speaker-row" data-index="${index}">
         ${this._entitySelectHTML(speaker.entity || "", entities, "entity-select")}
+        <div class="native-select-wrap type-select-wrap">
+          <select class="type-select">${typeOptions}</select>
+        </div>
         <ha-textfield class="name-input" label="Label" value="${name}" style="width:130px;flex-shrink:0"></ha-textfield>
         <button class="remove-btn" title="Remove" aria-label="Remove speaker">✕</button>
       </div>`;
@@ -878,6 +970,14 @@ class TTSAnnounceCardEditor extends HTMLElement {
       });
     }
 
+    const alexaTypeEl = shadow.getElementById("alexaType");
+    if (alexaTypeEl) {
+      alexaTypeEl.addEventListener("change", (e) => {
+        this._config.alexa_type = e.target.value;
+        this._fireConfigChanged();
+      });
+    }
+
     this._bindSpeakerRows();
 
     shadow
@@ -892,12 +992,22 @@ class TTSAnnounceCardEditor extends HTMLElement {
     this.shadowRoot.querySelectorAll(".entity-select").forEach((el) => {
       el.addEventListener("change", () => this._onEntityChange(el));
     });
+    this.shadowRoot.querySelectorAll(".type-select").forEach((el) => {
+      el.addEventListener("change", () => this._onTypeChange(el));
+    });
     this.shadowRoot.querySelectorAll(".name-input").forEach((el) => {
       el.addEventListener("input", () => this._onNameChange(el));
     });
     this.shadowRoot.querySelectorAll(".remove-btn").forEach((el) => {
       el.addEventListener("click", () => this._onRemoveSpeaker(el));
     });
+  }
+
+  _guessSpeakerType(entityId, entities) {
+    if (!entityId) return "chime";
+    const match = entities?.find((e) => e.entity_id === entityId);
+    const platform = (match?.platform || "").toLowerCase();
+    return platform.includes("alexa") ? "alexa" : "chime";
   }
 
   _rowIndex(el) {
@@ -920,6 +1030,25 @@ class TTSAnnounceCardEditor extends HTMLElement {
         if (nameInput) nameInput.value = fn;
       }
     }
+    if (!speakers[index].type) {
+      speakers[index].type = this._guessSpeakerType(
+        entity,
+        this._getMediaPlayers(),
+      );
+      const row = this.shadowRoot.querySelectorAll(".speaker-row")[index];
+      const typeSelect = row?.querySelector(".type-select");
+      if (typeSelect) typeSelect.value = speakers[index].type;
+    }
+    this._config.speakers = speakers;
+    this._fireConfigChanged();
+  }
+
+  _onTypeChange(selectEl) {
+    const index = this._rowIndex(selectEl);
+    if (index < 0) return;
+    const speakers = this._config.speakers || [];
+    if (!speakers[index]) return;
+    speakers[index].type = selectEl.value;
     this._config.speakers = speakers;
     this._fireConfigChanged();
   }
@@ -946,7 +1075,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
   _onAddSpeaker() {
     const speakers = this._config.speakers || [];
-    speakers.push({ entity: "", name: "" });
+    speakers.push({ entity: "", name: "", type: "chime" });
     this._config.speakers = speakers;
     this._reRenderSpeakerRows();
     this._fireConfigChanged();
@@ -957,6 +1086,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
     this._config.speakers = entities.map((e) => ({
       entity: e.entity_id,
       name: e.name,
+      type: this._guessSpeakerType(e.entity_id, entities),
     }));
     this._reRenderSpeakerRows();
     this._fireConfigChanged();
@@ -982,10 +1112,17 @@ class TTSAnnounceCardEditor extends HTMLElement {
       default_voice: this._config.default_voice || "en-US-AriaNeural",
       default_volume: this._config.default_volume ?? 50,
     };
+    if (this._config.alexa_type?.trim()) {
+      config.alexa_type = this._config.alexa_type.trim();
+    }
     if (this._config.speakers?.length) {
       config.speakers = this._config.speakers
         .filter((s) => s.entity)
-        .map((s) => ({ entity: s.entity, name: s.name || s.entity }));
+        .map((s) => ({
+          entity: s.entity,
+          name: s.name || s.entity,
+          ...(s.type ? { type: s.type } : {}),
+        }));
     }
     this.dispatchEvent(
       new CustomEvent("config-changed", {
