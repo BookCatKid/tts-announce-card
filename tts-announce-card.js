@@ -577,11 +577,22 @@ class TTSAnnounceCard extends HTMLElement {
       announce: true,
     };
     data.tts_platform = ttsPlatform;
-    if (this._form.voice) data.language = this._form.voice;
+    if (this._form.voice) {
+      data.voice = this._form.voice;
+      const language = this._voiceToLanguage(this._form.voice);
+      if (language) data.language = language;
+    }
     if (Number.isFinite(volume)) {
       data.volume_level = Math.max(0, Math.min(100, volume)) / 100;
     }
     return data;
+  }
+
+  _voiceToLanguage(voice) {
+    if (!voice || typeof voice !== "string") return null;
+    const parts = voice.split("-");
+    if (parts.length < 2) return null;
+    return `${parts[0]}-${parts[1]}`;
   }
 
   static async getConfigElement() {
