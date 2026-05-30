@@ -363,8 +363,6 @@ class TTSAnnounceCard extends HTMLElement {
   }
 }
 
-customElements.define('tts-announce-card', TTSAnnounceCard);
-
 const EDITOR_STYLE = `
   :host { display: block; }
   .editor {
@@ -650,6 +648,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
 }
 
 customElements.define('tts-announce-card-editor', TTSAnnounceCardEditor);
+customElements.define('tts-announce-card', TTSAnnounceCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
