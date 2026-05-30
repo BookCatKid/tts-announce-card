@@ -224,8 +224,8 @@ class TTSAnnounceCard extends HTMLElement {
       s('volumeDisplay').textContent = this._form.volume;
     });
 
-    s('voice').addEventListener('change', () => {
-      this._form.voice = s('voice').value;
+    s('voice').addEventListener('selected', (ev) => {
+      if (ev.detail?.value != null) this._form.voice = ev.detail.value;
     });
 
     s('sendBtn').addEventListener('click', () => this._send());
@@ -350,7 +350,8 @@ class TTSAnnounceCard extends HTMLElement {
     });
   }
 
-  static getConfigElement() {
+  static async getConfigElement() {
+    await customElements.whenDefined('tts-announce-card-editor');
     return document.createElement('tts-announce-card-editor');
   }
 
@@ -521,9 +522,11 @@ class TTSAnnounceCardEditor extends HTMLElement {
 
     const voice = shadow.getElementById('voice');
     if (voice) {
-      voice.addEventListener('change', () => {
-        this._config.default_voice = voice.value;
-        this._fireConfigChanged();
+      voice.addEventListener('selected', (ev) => {
+        if (ev.detail?.value != null) {
+          this._config.default_voice = ev.detail.value;
+          this._fireConfigChanged();
+        }
       });
     }
 
@@ -550,7 +553,7 @@ class TTSAnnounceCardEditor extends HTMLElement {
   _bindSpeakerRows() {
     const shadow = this.shadowRoot;
     shadow.querySelectorAll('.entity-select').forEach(el => {
-      el.addEventListener('change', () => this._onEntityChange(el));
+      el.addEventListener('selected', (ev) => this._onEntityChange(el, ev.detail?.value));
     });
     shadow.querySelectorAll('.name-input').forEach(el => {
       el.addEventListener('input', () => this._onNameChange(el));
@@ -560,11 +563,11 @@ class TTSAnnounceCardEditor extends HTMLElement {
     });
   }
 
-  _onEntityChange(selectEl) {
+  _onEntityChange(selectEl, selectedValue) {
     const row = selectEl.closest('.speaker-row');
     if (!row) return;
     const index = parseInt(row.dataset.index, 10);
-    const entity = selectEl.value;
+    const entity = selectedValue ?? selectEl.value;
     const speakers = this._config.speakers || [];
     if (!speakers[index]) return;
     speakers[index].entity = entity;
@@ -629,7 +632,9 @@ class TTSAnnounceCardEditor extends HTMLElement {
   }
 
   _fireConfigChanged() {
-    const config = {};
+    const config = {
+      type: this._config.type || 'custom:tts-announce-card',
+    };
     if (this._config.default_voice && this._config.default_voice !== 'en-US-AriaNeural') {
       config.default_voice = this._config.default_voice;
     }
